@@ -1,0 +1,127 @@
+body {
+    font-family: "Palatino Linotype";
+    padding-left: .3in;
+}
+
+.card {
+    float: left;
+    width: 2.2in;
+    height: 3.2in;
+    border: .08in solid black;
+    border-radius: .08in;
+    z-index: 1;
+    page-break-inside: avoid;
+    position: relative;
+    overflow: hidden;
+}
+
+.title_area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 0.29in;
+    border-width: 0 0 0.02in 0;
+    border-style: solid;
+    border-color: black;
+    font-weight: bold;
+    margin: 0;
+    padding: 0 0.05in;
+    overflow: hidden;
+    text-align: center;
+}
+
+.card_body_area {
+    position: absolute;
+    top: 0.3in;
+    right: 0;
+    bottom: 0.14in;
+    left: 0.2in;
+    overflow: hidden;
+}
+
+.card_body_area .field {
+    border: 0.01in solid black;
+    margin: 0.05in 0.05in 0.05in 0;
+    padding: 0.05in;
+}
+
+.fieldname {
+    font-weight: bold;
+}
+
+.text_area {
+    margin: 0.05in 0.05in 0.05in 0;
+    padding: 0.05in;
+}
+
+.text_area .field {
+    border: 0;
+    margin: 0;
+}
+
+.empty.text_area {
+    display: none;
+}
+
+.traits_area {
+    border: 0;
+}
+
+.trait {
+    font-family: Impact;
+    font-size: .12in;
+    color: black;
+    float: center;
+    padding: .005in .06in .01in .06in;
+    border: .02in outset black;
+    white-space: pre;
+    position: relative;
+}
+
+.flavor_text.field {
+    border-width: 0.01in 0 0 0;
+    border-style: solid;
+    border-color: black;
+    font-style: italic;
+}
+
+.copyline {
+    position: absolute;
+    bottom: .008in; right: .01in;
+    color: black;
+    font-size: 0.1in;
+    font-family: sans-serif;
+}
+
+.cardtype_label {
+    transform: rotate(-90deg);
+    transform-origin: 0 0;
+    position: absolute;
+    height: 0.2in;
+    bottom: 0;
+    left: 0;
+}
+
+/* Font Sizing Shenanigans */
+.name.field.bigtext {
+    font-size: 0.2in;
+}
+.name.field.mediumtext {
+    font-size: 0.18in;
+    margin-top: 0.02in;
+}
+.name.field.smalltext {
+    font-size: 0.14in;
+    margin-top: 0.06in;
+}
+
+.text_area.bigtext {
+    font-size: 0.18in;
+}
+.text_area.mediumtext {
+    font-size: 0.14in;
+}
+.text_area.smalltext {
+    font-size: 0.10in;
+}
