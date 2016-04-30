@@ -194,6 +194,8 @@ class Card:
         return s
 
     def cardtype_area_html(self):
+        if self.cardtype == "-":
+            return ""
         s = "<div class='cardtype_area'>\n"
         s += "<div class='cardtype_label'>%s</div>\n" % self.cardtype
         s += "</div>"#/.cardtype_area
@@ -226,7 +228,13 @@ class Card:
 def all_cards(spreadsheet, copyowner, version=None, addcss=None, defaultcss=True):
     allcards = []
     spreadsheet_data = pyexcel.get_data(spreadsheet)
-    for sheetname, sheetdata in spreadsheet_data.items():
+    # A single-sheet file comes back as a 2d array;
+    # a multi-sheet file comes back as an OrderedDict of sheet names to 2d arrays
+    if type(spreadsheet_data) == OrderedDict:
+        pages = spreadsheet_data.items()
+    else:
+        pages = {"-": spreadsheet_data}.items()
+    for sheetname, sheetdata in pages:
         cardtype = sheetname
         cardrows = twod_array_to_ordered_dict_array(sheetdata)
         for row in cardrows:
