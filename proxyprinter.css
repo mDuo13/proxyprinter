@@ -116,12 +116,12 @@ body {
     margin-top: 0.06in;
 }
 
-.text_area.bigtext {
+.bigtext {
     font-size: 0.18in;
 }
-.text_area.mediumtext {
+.mediumtext {
     font-size: 0.14in;
 }
-.text_area.smalltext {
+.smalltext {
     font-size: 0.10in;
 }

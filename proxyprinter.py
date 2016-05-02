@@ -5,6 +5,7 @@ import csv
 import re
 import argparse
 import pyexcel_ods3 as pyexcel
+import hashlib
 from cgi import escape
 from random import randint
 from logging import warning
@@ -19,11 +20,26 @@ SPECIAL_FIELDS = [
     "Version", #Appears in footer; can be used to print only updated cards
 ]
 
-TEXT_SIZING_THRESHOLDS = {
+DEFAULT_STYLE_FILE = "proxyprinter.css"
+DEFAULT_TEXT_SIZING_THRESHOLDS = {
     "*": (30, 50),
     "Text": (140, 220),
     "Name": (18, 24),
 }
+DEFAULT_RICH_FIELDS = [
+    "Text"
+]
+
+#Reserved names potentially used to define settings in the spreadsheet
+SETTING_SHEET_LABEL = "ProxyPrinter Settings"
+SETTING_LABEL_CSSFILE = "CSSFile"
+SETTING_LABEL_COPYRIGHT = "Copyright"
+SETTING_LABEL_TEXTSIZEFIELD = "TextSizeField"
+SETTING_LABEL_TEXTSIZETHRESHOLD1 = "TextSizeMediumIfOver"
+SETTING_LABEL_TEXTSIZETHRESHOLD2 = "TextSizeSmallIfOver"
+SETTING_LABEL_RICHFIELDS = "RichFields"
+SETTING_LABEL_PROCESSPATTERNS = "ProcessPatterns"
+SETTING_LABEL_PROCESSREPLACEMENTS = "ProcessReplacements"
 
 def escape_html(s):
     #like cgi.escape, but undo escaping &nbsp;
@@ -57,14 +73,20 @@ def twod_array_to_ordered_dict_array(array2d):
 def slug_text(s):
     return re.sub(r"\W","",re.sub(r"\s","_",s.lower()))
 
+
+
 class Card:
     def __init__(self, cardtype="", fields=OrderedDict(), copyowner="",
-                size_thresholds=TEXT_SIZING_THRESHOLDS):
+                size_thresholds=DEFAULT_TEXT_SIZING_THRESHOLDS,
+                text_subs = {}, rich_fields = ["Text"]):
         self.cardtype = cardtype
         self.copyowner = copyowner
         self.fields = fields
-        self.intify_fields()
+        self.text_subs = text_subs
         self.size_thresholds = size_thresholds
+        self.rich_fields = rich_fields
+        self.intify_fields()
+        self.process_split_fields()
 
     def intify_fields(self):
         """Force integer floats to integer type"""
@@ -74,11 +96,21 @@ class Card:
             if type(val) == float and val.is_integer():
                 self.fields[key] = int(val)
 
+    def process_split_fields(self):
+        if "Traits" in self.fields.keys():
+            self.traits = [t.strip() for t in self.fields["Traits"].split(",")]
+        else:
+            self.traits = []
+
     def process(self, text, context="*"):
         #save the text length before we html-ify it
         text = str(text)
         textlen = len(text)
         text = escape_html(text)
+
+        if context in self.rich_fields:
+            for pattern, replacement in self.text_subs.items():
+                text = re.sub(pattern, replacement, text)
 
         text = text.replace("\\n","<br />\n")
         textsize = self.size_text(textlen, context)
@@ -96,29 +128,6 @@ class Card:
         else:
             return "bigtext"
 
-    # def title_html(self):
-    #     s = "<div class='titlebox'>\n"
-    #     #adapt font size to name length
-    #     fontsize = "bigtext"
-    #     if len(self.name) > 13:
-    #         fontsize = "mediumtext"
-    #     if len(self.name) > 22:
-    #         fontsize = "smalltext"
-    #     s += ("<div class='name %s'>" % fontsize)
-    #     if self.name.lower() == "(unnamed)":
-    #         s += "&nbsp;"
-    #     else:
-    #         s += self.name
-    #     s += "</div>\n"#name
-    #     if self.traits:
-    #         s += "<div class='subtitle'>"
-    #         for t in self.traits:
-    #             if t:
-    #                 s += "<span class='"+t.lower()+" trait'>"+t+"</span>\n"
-    #         s += "<span class='cardtype'>%s</span>\n"%self.get_type().title()
-    #         s += "</div>\n"#subtitle
-    #     s += "</div>\n"#titlebox
-    #     return s
 
     def art_spacer_html(self):
         return "<div class='artspacer'>&nbsp;</div>\n"
@@ -134,9 +143,9 @@ class Card:
             flavor_text = "-"
 
         # Process, escape HTML, figure out combined text length for font sizing
-        _, fontsize = self.process(text+flavor_text, "Text")
+        _, fontsize = self.process(text+flavor_text, context="Text")
         text, _ = self.process(text, "Text")
-        flavor_text, _ = self.process(flavor_text, "Flavor Text")
+        flavor_text, _ = self.process(flavor_text, context="Flavor Text")
 
         if (text == "-" or not text) and (flavor_text == "-" or not flavor_text):
             s = "<div class='empty text_area'>\n"
@@ -177,9 +186,8 @@ class Card:
         s = ""
         if "Traits" in self.fields.keys():
             s += "<div class='traits_area field'>\n"
-            traits = [t.strip() for t in self.fields["Traits"].split(",")]
-            for trait in traits:
-                trait_text, fontsize = self.process(trait, "Traits")
+            for trait in self.traits:
+                trait_text, fontsize = self.process(trait, context="Traits")
                 s += "<span class='trait %s %s'>%s</span>\n" % (slug_text(trait), fontsize, trait_text)
             s += "</div>"#/.traits
         return s
@@ -225,55 +233,234 @@ class Card:
         s += "</div>\n"
         return s
 
-def all_cards(spreadsheet, copyowner, version=None, addcss=None, defaultcss=True):
-    allcards = []
-    spreadsheet_data = pyexcel.get_data(spreadsheet)
-    # A single-sheet file comes back as a 2d array;
-    # a multi-sheet file comes back as an OrderedDict of sheet names to 2d arrays
-    if type(spreadsheet_data) == OrderedDict:
-        pages = spreadsheet_data.items()
-    else:
-        pages = {"-": spreadsheet_data}.items()
-    for sheetname, sheetdata in pages:
-        cardtype = sheetname
-        cardrows = twod_array_to_ordered_dict_array(sheetdata)
-        for row in cardrows:
-            if cli_args.version:
-                if "Version" not in row or str(row["Version"]) != version:
+class ProxyPrinter:
+    def __init__(self, spreadsheet, copyowner=None, version=None, addcss=None,
+                defaultcss=True, text_subs={}, colorize=True, rich_fields=[]):
+        self.read_sheet(spreadsheet)
+        self.copyowner = copyowner
+        self.version = version
+        self.addcss = addcss
+        self.defaultcss = defaultcss
+        self.text_subs = text_subs
+        self.colorize = colorize
+        self.rich_fields = rich_fields
+
+        self.parse_settings()
+        self.parse_sheet_cards()
+
+    def read_sheet(self, ods_file):
+        self.sheet = pyexcel.get_data(ods_file)
+
+    def parse_settings(self):
+        self.skip_sheets = [SETTING_SHEET_LABEL]
+        self.size_thresholds = DEFAULT_TEXT_SIZING_THRESHOLDS
+        if type(self.sheet) != OrderedDict:
+            warning("Single page sheet (%s); no settings pulled"%type(self.sheet))
+            # Single page sheet; no custom settings defined
+            return
+        elif SETTING_SHEET_LABEL not in self.sheet.keys():
+            warning("No settings sheet found")
+            # No settings sheet; no custom settings defined
+            return
+
+        settings_sheet = self.sheet[SETTING_SHEET_LABEL]
+        if len(settings_sheet) < 2:
+            warning("Less than 2 rows in settings sheet")
+            return
+
+        setting_keys = settings_sheet[0]
+        setting_simple_values = settings_sheet[1]
+
+        # Setting: Custom CSS filename
+        if not self.addcss:
+            try:
+                self.addcss = setting_simple_values[
+                            setting_keys.index(SETTING_LABEL_CSSFILE)]
+            except ValueError:
+                warning("Failed to get addcss value from settings")
+        else:
+            print("ADDCSS",self.addcss, type(self.addcss))
+
+        # Setting: Copyright
+        if not self.copyowner:
+            try:
+                self.copyowner = setting_simple_values[
+                            setting_keys.index(SETTING_LABEL_COPYRIGHT)]
+            except ValueError:
+                warning("Failed to get copyright value from settings")
+
+        # Setting: Text Size Thresholds
+        try:
+            pos_textsizefield = setting_keys.index(SETTING_LABEL_TEXTSIZEFIELD)
+            pos_textsizemed = setting_keys.index(SETTING_LABEL_TEXTSIZETHRESHOLD1)
+            pos_textsizesmall = setting_keys.index(SETTING_LABEL_TEXTSIZETHRESHOLD2)
+            got_textsize_settings = True
+        except ValueError:
+            warning("Failed to get text size thresholds from settings")
+            got_textsize_settings = False
+
+        if got_textsize_settings:
+            for row in settings_sheet[1:]:
+                if len(row) > pos_textsizefield and row[pos_textsizefield]:
+                    textfieldname = row[pos_textsizefield]
+                    # Get existing or default thresholds for this field name
+                    if textfieldname in self.size_thresholds.keys():
+                        threshold_med, threshold_sm = self.size_thresholds[textfieldname]
+                    else:
+                        threshold_med, threshold_sm = self.size_thresholds["*"]
+                else:
+                    warning("Text Thresholds: Skipping row %s"%row)
                     continue
-            c = Card(cardtype=sheetname, fields=row, copyowner=copyowner)
-            allcards.append(c)
 
-    s = "<!DOCTYPE html>\n<html>\n<head>\n"
-    if defaultcss:
-        with open("proxyprinter.css","r") as f:
-            s += "<style type='text/css'>%s</style>" % f.read()
-    if addcss:
-        s += "<link rel='stylesheet' href='%s' />" % cli_args.css
-    s += "</head><body>"
+                if len(row) > pos_textsizemed and row[pos_textsizemed]:
+                    threshold_med = row[pos_textsizemed]
 
-    for c in allcards:
-        s += c.html()
+                if len(row) > pos_textsizesmall and row[pos_textsizesmall]:
+                    threshold_sm = row[pos_textsizesmall]
 
-    s += "</body></html>"
-    return s
+                self.size_thresholds[textfieldname] = (threshold_med, threshold_sm)
+
+        # Setting: Rich Fields (These fields have post-processing applied)
+        try:
+            pos_richfields = setting_keys.index(SETTING_LABEL_RICHFIELDS)
+            got_richfield_settings = True
+        except ValueError:
+            warning("Failed to get rich text settings")
+            got_richfield_settings = False
+
+        if got_richfield_settings:
+            rich_fields = []
+            for row in settings_sheet[1:]:
+                if len(row) > pos_richfields and row[pos_richfields]:
+                    rich_fields.append(row[pos_richfields])
+            self.rich_fields = rich_fields
+        else:
+            self.rich_fields = DEFAULT_RICH_FIELDS
+
+        # Setting: Text Processing Patterns (regex subs applied to rich fields)
+        try:
+            pos_processpatterns = setting_keys.index(SETTING_LABEL_PROCESSPATTERNS)
+            pos_processreplacements = setting_keys.index(SETTING_LABEL_PROCESSREPLACEMENTS)
+            got_textprocessing_settings = True
+        except ValueError:
+            warning("Failed to get text processing settings")
+            got_textprocessing_settings = False
+
+        if got_textprocessing_settings:
+            text_subs = OrderedDict()
+            for row in settings_sheet[1:]:
+                if (len(row) > pos_processpatterns
+                        and row[pos_processpatterns]
+                        and len(row) > pos_processreplacements
+                        and row[pos_processreplacements]):
+                    pattern = re.compile(row[pos_processpatterns])
+                    repl = row[pos_processreplacements]
+                    text_subs[pattern] = repl
+            self.text_subs = text_subs
+
+    def parse_sheet_cards(self):
+        self.cards = []
+        # A single-sheet file comes back as a 2d array;
+        # a multi-sheet file comes back as an OrderedDict of sheet names to 2d arrays
+        if type(self.sheet) == OrderedDict:
+            pages = self.sheet.items()
+        else:
+            pages = {"-": self.sheet}.items()
+        for sheetname, sheetdata in pages:
+            if sheetname == SETTING_SHEET_LABEL:
+                #This sheet is settings, not cards; skip
+                continue
+            cardtype = sheetname
+            cardrows = twod_array_to_ordered_dict_array(sheetdata)
+            for row in cardrows:
+                if self.version:
+                    #Ignore cards not from this version
+                    if "Version" not in row or str(row["Version"]) != self.version:
+                        continue
+                c = Card(cardtype=sheetname, fields=row,
+                         copyowner=self.copyowner,
+                         size_thresholds=self.size_thresholds,
+                         text_subs=self.text_subs,
+                         rich_fields=self.rich_fields)
+                self.cards.append(c)
+
+    def trait_colors_css(self):
+        trait_keys = set()
+        for c in self.cards:
+            trait_keys.update(c.traits)
+
+        def int_from_string_hash(s, min_i, max_i, encoding="utf-8"):
+            m = hashlib.md5(bytes(s, encoding))
+            return (int(m.hexdigest(), 16) % (max_i-min_i)) + min_i
+        s = ""
+        for t in trait_keys:
+            hue = int_from_string_hash(t,0,360)#randint(0,360)
+            sat = int_from_string_hash(t,40,100)#randint(40,100)
+            lit = 85
+            s += ".trait.%s {background-color: hsl(%d, %d%%, %d%%);}\n" % (slug_text(t), hue, sat, lit)
+
+        return s
+
+    def render_all(self):
+        s = "<!DOCTYPE html>\n<html>\n<head>\n"
+        if self.defaultcss:
+            with open(DEFAULT_STYLE_FILE,"r") as f:
+                s += "<style type='text/css'>%s</style>" % f.read()
+            #randomly colorize traits
+        if self.colorize:
+            s += "<style type='text/css'>%s</style>" % self.trait_colors_css()
+        if self.addcss:
+            s += "<link rel='stylesheet' href='%s' />" % self.addcss
+        s += "</head><body>"
+
+        for c in self.cards:
+            s += c.html()
+
+        s += "</body></html>"
+        return s
+
+# def all_cards(spreadsheet, copyowner, version=None, addcss=None, defaultcss=True):
+#     allcards = []
+#     spreadsheet_data = pyexcel.get_data(spreadsheet)
+#     # A single-sheet file comes back as a 2d array;
+#     # a multi-sheet file comes back as an OrderedDict of sheet names to 2d arrays
+#     if type(spreadsheet_data) == OrderedDict:
+#         pages = spreadsheet_data.items()
+#     else:
+#         pages = {"-": spreadsheet_data}.items()
+#     for sheetname, sheetdata in pages:
+#         cardtype = sheetname
+#         cardrows = twod_array_to_ordered_dict_array(sheetdata)
+#         for row in cardrows:
+#             if cli_args.version:
+#                 if "Version" not in row or str(row["Version"]) != version:
+#                     continue
+#             c = Card(cardtype=sheetname, fields=row, copyowner=copyowner)
+#             allcards.append(c)
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Generate card images in HTML from spreadsheet.")
     parser.add_argument("spreadsheet", type=str,
                         help=".ods spreadsheet to source card data")
-    parser.add_argument("--copyright","-c", type=str, default="Rome Reginelli",
+    parser.add_argument("--copyright","-c", type=str, default="",
                         help="Copyright owner to show in footer")
     parser.add_argument("--css", type=str,
                         help="Name of additional css file")
     parser.add_argument("--no_default_css", action="store_true",
                         help="Don't include the default CSS")
+    parser.add_argument("--no_trait_colors", action="store_true",
+                        help="Don't procedurally color-code Traits")
     parser.add_argument("--version", "-v", type=str,
                         help="Print only cards whose Version matches this")
 
     cli_args = parser.parse_args()
 
     defaultcss = not cli_args.no_default_css
-    print( all_cards(cli_args.spreadsheet, copyowner=cli_args.copyright,
-            version=cli_args.version, defaultcss=defaultcss, addcss=cli_args.css) )
+    colorize = not cli_args.no_trait_colors
+    pp = ProxyPrinter(cli_args.spreadsheet, copyowner=cli_args.copyright,
+            version=cli_args.version, defaultcss=defaultcss, addcss=cli_args.css,
+            colorize=colorize)
+    print( pp.render_all() )
