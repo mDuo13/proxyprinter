@@ -4,23 +4,29 @@ Proxy Printer
 Generates reasonably good-looking HTML proxies for a card game from an ODS spreadsheet. Useful for making card game prototypes. Comes with some basic CSS; you can add your own style rules to make the proxies prettier or better suited to your game. Does some heuristic text resizing so that text of different lengths is more likely to fit without being too small.
 
 
-Setup
+Installing with pip
 ------
 
-* Python 3 required
-* Install [pyexcel-ods3](https://github.com/pyexcel/pyexcel-ods3)
+(Python 3 required)
+
+```
+pip3 install proxyprinter
+```
+
+(You might need to use `sudo` or a VirtualEnv depending on your system setup.)
+
 
 Usage
 ------
 
-     ./proxyprinter.py cards.ods > output_file.html
+     proxyprinter example-cards.ods > output_file.html
 
-Do `./proxyprinter.py --help` for usage statement with all commandline options.
+Do `proxyprinter --help` for usage statement with all commandline options.
 
 
 Input Format
 -------------
-OpenDocument Spreadsheet (ODF) file. Example: [cards.ods](cards.ods). Each "Sheet" in the document is one type of card in your game. The name of the sheet is the card type. The first row in the sheet lists the titles for each field. Each subsequent row is a card.
+OpenDocument Spreadsheet (ODF) file. Example: [example-cards.ods](example-cards.ods). Each "Sheet" in the document is one type of card in your game. The name of the sheet is the card type. The first row in the sheet lists the titles for each field. Each subsequent row is a card.
 
 The following field names are special in some way:
 
@@ -29,6 +35,7 @@ The following field names are special in some way:
 - **Text**: Gets put in a single text_area alongside Flavor Text.
 - **Flavor Text**: Gets put in a single text_area alongside Text.
 - **Version**: Listed in the footer. Use this with the `-v` switch to only print recently-updated cards.
+- **Copies:** If present and a non-negative integer, prints that many copies of the card as part of the overall print sheet. (Otherwise, the print sheet contains 1 copy of this card.)
 
 
 In-Stylesheet Settings

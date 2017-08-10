@@ -6,11 +6,12 @@ import re
 import argparse
 import pyexcel_ods3 as pyexcel
 import hashlib
+import logging
 from cgi import escape
 from random import randint
-from logging import warning
 from collections import OrderedDict
 from time import strftime
+from pkg_resources import resource_string
 
 SPECIAL_FIELDS = [
     "Name", #Title of the card
@@ -18,9 +19,11 @@ SPECIAL_FIELDS = [
     "Text", #Shares a box with flavor text
     "Flavor Text", #Italicized, follows text
     "Version", #Appears in footer; can be used to print only updated cards
+    "Copies", #Print the same card this many times
 ]
 
-DEFAULT_STYLE_FILE = "proxyprinter.css"
+DEFAULT_STYLE = resource_string(__name__, "proxyprinter.css").decode('utf-8')
+
 DEFAULT_TEXT_SIZING_THRESHOLDS = {
     "*": (30, 50),
     "Text": (140, 220),
@@ -41,6 +44,11 @@ SETTING_LABEL_RICHFIELDS = "RichFields"
 SETTING_LABEL_PROCESSPATTERNS = "ProcessPatterns"
 SETTING_LABEL_PROCESSREPLACEMENTS = "ProcessReplacements"
 
+
+#Set up logging
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.StreamHandler())
+
 def escape_html(s):
     #like cgi.escape, but undo escaping &nbsp;
     return escape(s).replace("&amp;nbsp;", "&nbsp;")
@@ -52,16 +60,18 @@ def replace_all(s, replacements):
 
 def twod_array_to_ordered_dict_array(array2d):
     if len(array2d) < 2 or type(array2d[0]) != list:
-        warning("Not a 2d array?")
+        logger.warning("Not a 2d array?")
         return []
 
     keys = array2d[0]
     vals = array2d[1:]
     od_rows = []
     for row in vals:
+        if not row: #skip empty rows
+            continue
         od = OrderedDict()
         if len(keys) != len(row):
-            warning("Mismatched number of fields in row: %s" % row)
+            logger.info("Mismatched number of fields in row: %s" % row)
 
         for i in range(0, len(keys)):
             if i >= len(row):
@@ -255,17 +265,17 @@ class ProxyPrinter:
         self.skip_sheets = [SETTING_SHEET_LABEL]
         self.size_thresholds = DEFAULT_TEXT_SIZING_THRESHOLDS
         if type(self.sheet) != OrderedDict:
-            warning("Single page sheet (%s); no settings pulled"%type(self.sheet))
+            logger.info("Single page sheet (%s); no settings pulled"%type(self.sheet))
             # Single page sheet; no custom settings defined
             return
         elif SETTING_SHEET_LABEL not in self.sheet.keys():
-            warning("No settings sheet found")
+            logger.info("No settings sheet found")
             # No settings sheet; no custom settings defined
             return
 
         settings_sheet = self.sheet[SETTING_SHEET_LABEL]
         if len(settings_sheet) < 2:
-            warning("Less than 2 rows in settings sheet")
+            logger.info("Less than 2 rows in settings sheet")
             return
 
         setting_keys = settings_sheet[0]
@@ -277,7 +287,7 @@ class ProxyPrinter:
                 self.addcss = setting_simple_values[
                             setting_keys.index(SETTING_LABEL_CSSFILE)]
             except ValueError:
-                warning("Failed to get addcss value from settings")
+                logger.info("Failed to get addcss value from settings")
         else:
             print("ADDCSS",self.addcss, type(self.addcss))
 
@@ -287,7 +297,7 @@ class ProxyPrinter:
                 self.copyowner = setting_simple_values[
                             setting_keys.index(SETTING_LABEL_COPYRIGHT)]
             except ValueError:
-                warning("Failed to get copyright value from settings")
+                logger.info("Failed to get copyright value from settings")
 
         # Setting: Text Size Thresholds
         try:
@@ -296,7 +306,7 @@ class ProxyPrinter:
             pos_textsizesmall = setting_keys.index(SETTING_LABEL_TEXTSIZETHRESHOLD2)
             got_textsize_settings = True
         except ValueError:
-            warning("Failed to get text size thresholds from settings")
+            logger.info("Failed to get text size thresholds from settings")
             got_textsize_settings = False
 
         if got_textsize_settings:
@@ -309,7 +319,7 @@ class ProxyPrinter:
                     else:
                         threshold_med, threshold_sm = self.size_thresholds["*"]
                 else:
-                    warning("Text Thresholds: Skipping row %s"%row)
+                    logger.debug("Text Thresholds: Skipping row %s"%row)
                     continue
 
                 if len(row) > pos_textsizemed and row[pos_textsizemed]:
@@ -325,7 +335,7 @@ class ProxyPrinter:
             pos_richfields = setting_keys.index(SETTING_LABEL_RICHFIELDS)
             got_richfield_settings = True
         except ValueError:
-            warning("Failed to get rich text settings")
+            logger.info("Failed to get rich text settings")
             got_richfield_settings = False
 
         if got_richfield_settings:
@@ -343,7 +353,7 @@ class ProxyPrinter:
             pos_processreplacements = setting_keys.index(SETTING_LABEL_PROCESSREPLACEMENTS)
             got_textprocessing_settings = True
         except ValueError:
-            warning("Failed to get text processing settings")
+            logger.info("Failed to get text processing settings")
             got_textprocessing_settings = False
 
         if got_textprocessing_settings:
@@ -404,9 +414,8 @@ class ProxyPrinter:
     def render_all(self):
         s = "<!DOCTYPE html>\n<html>\n<head>\n"
         if self.defaultcss:
-            with open(DEFAULT_STYLE_FILE,"r") as f:
-                s += "<style type='text/css'>%s</style>" % f.read()
-            #randomly colorize traits
+            s += "<style type='text/css'>%s</style>" % DEFAULT_STYLE
+        #randomly colorize traits
         if self.colorize:
             s += "<style type='text/css'>%s</style>" % self.trait_colors_css()
         if self.addcss:
@@ -414,33 +423,20 @@ class ProxyPrinter:
         s += "</head><body>"
 
         for c in self.cards:
-            s += c.html()
+            s_copies = c.fields.get("Copies", 1)
+            try:
+                copies = int(s_copies)
+            except ValueError:
+                copies = 1
+            if copies < 0:
+                copies = 1
+            s += c.html()*copies
 
         s += "</body></html>"
         return s
 
-# def all_cards(spreadsheet, copyowner, version=None, addcss=None, defaultcss=True):
-#     allcards = []
-#     spreadsheet_data = pyexcel.get_data(spreadsheet)
-#     # A single-sheet file comes back as a 2d array;
-#     # a multi-sheet file comes back as an OrderedDict of sheet names to 2d arrays
-#     if type(spreadsheet_data) == OrderedDict:
-#         pages = spreadsheet_data.items()
-#     else:
-#         pages = {"-": spreadsheet_data}.items()
-#     for sheetname, sheetdata in pages:
-#         cardtype = sheetname
-#         cardrows = twod_array_to_ordered_dict_array(sheetdata)
-#         for row in cardrows:
-#             if cli_args.version:
-#                 if "Version" not in row or str(row["Version"]) != version:
-#                     continue
-#             c = Card(cardtype=sheetname, fields=row, copyowner=copyowner)
-#             allcards.append(c)
 
-
-
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(
         description="Generate card images in HTML from spreadsheet.")
     parser.add_argument("spreadsheet", type=str,
@@ -464,3 +460,6 @@ if __name__ == "__main__":
             version=cli_args.version, defaultcss=defaultcss, addcss=cli_args.css,
             colorize=colorize)
     print( pp.render_all() )
+
+if __name__ == "__main__":
+    main()
