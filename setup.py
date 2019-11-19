@@ -11,7 +11,7 @@ except ImportError:
 
 setup(
     name='proxyprinter',
-    version='0.3.0',
+    version='0.3.1',
     description='Generate card game mockups from .ods spreadsheets',
     long_description=long_description,
     url='https://github.com/mduo13/proxyprinter',

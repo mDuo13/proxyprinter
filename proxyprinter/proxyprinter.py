@@ -412,7 +412,7 @@ class ProxyPrinter:
         return s
 
     def render_all(self):
-        s = "<!DOCTYPE html>\n<html>\n<head>\n"
+        s = "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\" />\n"
         if self.defaultcss:
             s += "<style type='text/css'>%s</style>" % DEFAULT_STYLE
         #randomly colorize traits
