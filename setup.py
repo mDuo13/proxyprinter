@@ -1,19 +1,18 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """setuptools based setup module"""
 
 from setuptools import setup
 
-# Convert the markdown readme to ReST using Pandoc
-try:
-    import pypandoc
-    long_description = pypandoc.convert('README.md', 'rst')
-except ImportError:
-    long_description = open('README.md').read()
+long_description = open('README.md').read()
 
 setup(
     name='proxyprinter',
     version='0.3.1',
     description='Generate card game mockups from .ods spreadsheets',
     long_description=long_description,
+    long_description_content_type="text/markdown",
     url='https://github.com/mduo13/proxyprinter',
     author='Rome Reginelli',
     author_email='mduo13@gmail.com',
