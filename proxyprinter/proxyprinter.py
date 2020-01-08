@@ -7,7 +7,7 @@ import argparse
 import pyexcel_ods3 as pyexcel
 import hashlib
 import logging
-from cgi import escape
+from html import escape
 from random import randint
 from collections import OrderedDict
 from time import strftime
