@@ -9,7 +9,7 @@ long_description = open('README.md').read()
 
 setup(
     name='proxyprinter',
-    version='0.4.0-a8',
+    version='0.4.0-a9',
     description='Generate card game mockups from .ods spreadsheets',
     long_description=long_description,
     long_description_content_type="text/markdown",

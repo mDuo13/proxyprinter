@@ -59,6 +59,7 @@ async function makezip() {
   const cards = document.querySelectorAll(".card")
   for (const card of cards) {
     zbutton.textContent = `${oldtext} (${n+1}/${cards.length})`
+    window.scrollTo(0, 0) // workaround for https://github.com/niklasvh/html2canvas/issues/1878
     const canvas = await html2canvas(card)
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
     zip.file(`${n++}.png`, blob)
@@ -70,7 +71,7 @@ async function makezip() {
   zbutton.disabled = ""
 }
 </script>
-<button onclick="javascript:makezip()" class="zipmaker">Make ZIP</button>
+<button onclick="javascript:makezip()" class="zipmaker">Make image ZIP</button>
 """
 
 #Set up logging
