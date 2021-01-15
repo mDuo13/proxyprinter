@@ -44,6 +44,34 @@ SETTING_LABEL_RICHFIELDS = "RichFields"
 SETTING_LABEL_PROCESSPATTERNS = "ProcessPatterns"
 SETTING_LABEL_PROCESSREPLACEMENTS = "ProcessReplacements"
 
+ZIP_CODE = """
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.5.0/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+<script type="application/javascript">
+async function makezip() {
+  const zbutton = document.querySelector(".zipmaker")
+  zbutton.disabled = "disabled"
+  const oldtext = zbutton.textContent
+
+  const zip = new JSZip()
+  let n = 0;
+  const cards = document.querySelectorAll(".card")
+  for (const card of cards) {
+    zbutton.textContent = `${oldtext} (${n+1}/${cards.length})`
+    const canvas = await html2canvas(card)
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+    zip.file(`${n++}.png`, blob)
+  }
+  fullzip = await zip.generateAsync({type:"blob"})
+  const fname = window.location.pathname.split("/").pop().replace(".html","")+".zip"
+  saveAs(fullzip, fname)
+  zbutton.textContent = oldtext
+  zbutton.disabled = ""
+}
+</script>
+<button onclick="javascript:makezip()" class="zipmaker">Make ZIP</button>
+"""
 
 #Set up logging
 logger = logging.getLogger(__name__)
@@ -81,6 +109,8 @@ def twod_array_to_ordered_dict_array(array2d):
     return od_rows
 
 def slug_text(s):
+    if "lower" not in dir(s):
+        s = str(s)
     return re.sub(r"\W","",re.sub(r"\s","_",s.lower()))
 
 
@@ -245,7 +275,8 @@ class Card:
 
 class ProxyPrinter:
     def __init__(self, spreadsheet, copyowner=None, version=None, addcss=None,
-                defaultcss=True, text_subs={}, colorize=True, rich_fields=[]):
+                defaultcss=True, text_subs={}, colorize=True, rich_fields=[],
+                addzipbutton=True):
         self.read_sheet(spreadsheet)
         self.copyowner = copyowner
         self.version = version
@@ -254,6 +285,7 @@ class ProxyPrinter:
         self.text_subs = text_subs
         self.colorize = colorize
         self.rich_fields = rich_fields
+        self.addzipbutton = addzipbutton
 
         self.parse_settings()
         self.parse_sheet_cards()
@@ -432,6 +464,8 @@ class ProxyPrinter:
                 copies = 1
             s += c.html()*copies
 
+        if self.addzipbutton:
+            s += ZIP_CODE
         s += "</body></html>"
         return s
 
@@ -451,14 +485,17 @@ def main():
                         help="Don't procedurally color-code Traits")
     parser.add_argument("--version", "-v", type=str,
                         help="Print only cards whose Version matches this")
+    parser.add_argument("--no_zip_button", "-z", action="store_true",
+                        help="Don't add a button to make a zip file of images.")
 
     cli_args = parser.parse_args()
 
     defaultcss = not cli_args.no_default_css
     colorize = not cli_args.no_trait_colors
+    addzipbutton = not cli_args.no_zip_button
     pp = ProxyPrinter(cli_args.spreadsheet, copyowner=cli_args.copyright,
             version=cli_args.version, defaultcss=defaultcss, addcss=cli_args.css,
-            colorize=colorize)
+            colorize=colorize, addzipbutton=addzipbutton)
     print( pp.render_all() )
 
 if __name__ == "__main__":

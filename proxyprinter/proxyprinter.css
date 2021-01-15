@@ -125,3 +125,9 @@ body {
 .smalltext {
     font-size: 0.10in;
 }
+
+@media print {
+  .zipmaker {
+    display: none;
+  }
+}
