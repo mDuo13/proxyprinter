@@ -94,6 +94,19 @@ body {
     font-family: sans-serif;
 }
 
+.number {
+    font-size: 0.1in;
+    position: absolute;
+    bottom: 0.008in;
+    left: 0.01in;
+}
+.number::before {
+  content: "#"
+}
+.typenumber {
+  display: none;
+}
+
 .cardtype_label {
     transform: rotate(-90deg);
     transform-origin: 0 0;
@@ -125,6 +138,7 @@ body {
 .smalltext {
     font-size: 0.10in;
 }
+
 
 @media print {
   .zipmaker {

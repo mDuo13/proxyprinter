@@ -7,6 +7,7 @@ import argparse
 import pyexcel_ods3 as pyexcel
 import hashlib
 import logging
+import json
 from html import escape
 from random import randint
 from collections import OrderedDict
@@ -55,18 +56,27 @@ async function makezip() {
   const oldtext = zbutton.textContent
 
   const zip = new JSZip()
-  let n = 0;
+  const fname = window.location.pathname.split("/").pop().replace(".html","")
+
+  const tts_json = document.querySelector("#tts_json").textContent
+  zip.file(`${fname}.json`, tts_json)
+
+  const canvas_opts = {
+    scale: 4
+  }
+
+  let n = 1;
   const cards = document.querySelectorAll(".card")
   for (const card of cards) {
     zbutton.textContent = `${oldtext} (${n+1}/${cards.length})`
     window.scrollTo(0, 0) // workaround for https://github.com/niklasvh/html2canvas/issues/1878
-    const canvas = await html2canvas(card)
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
-    zip.file(`${n++}.png`, blob)
+    const canvas = await html2canvas(card, canvas_opts)
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'))
+    zip.file(`${n++}.jpg`, blob)
   }
   fullzip = await zip.generateAsync({type:"blob"})
-  const fname = window.location.pathname.split("/").pop().replace(".html","")+".zip"
-  saveAs(fullzip, fname)
+
+  saveAs(fullzip, fname+".zip")
   zbutton.textContent = oldtext
   zbutton.disabled = ""
 }
@@ -115,17 +125,41 @@ def slug_text(s):
     return re.sub(r"\W","",re.sub(r"\s","_",s.lower()))
 
 
+class CardCounter:
+    def __init__(self):
+        self.total = 0
+        self.by_type = {}
+
+    def increment(self,obj):
+        self.total += 1
+        t = obj.__class__.__name__.lower()
+        if t in self.by_type:
+            self.by_type[t] += 1
+        else:
+            self.by_type[t] = 1
+
+        return self.total,self.by_type[t]
+
+    def skip_to(self,n):
+        self.total = n
 
 class Card:
     def __init__(self, cardtype="", fields=OrderedDict(), copyowner="",
                 size_thresholds=DEFAULT_TEXT_SIZING_THRESHOLDS,
-                text_subs = {}, rich_fields = ["Text"]):
+                text_subs = {}, rich_fields = ["Text"],
+                counter=None):
         self.cardtype = cardtype
         self.copyowner = copyowner
         self.fields = fields
         self.text_subs = text_subs
         self.size_thresholds = size_thresholds
         self.rich_fields = rich_fields
+        if counter:
+            self.number,self.type_number = counter.increment(self)
+        else:
+            self.number = None
+            self.type_number = None
+
         self.intify_fields()
         self.process_split_fields()
 
@@ -258,8 +292,16 @@ class Card:
         s = "<div class='copyline'>%s©%s %s</div>\n" % (vstring, self.copyowner, strftime("%Y"))
         return s
 
+    def numbering_html(self):
+        s = ""
+        s += "<div class='number'>"+str(self.number)+"</div>\n"
+        s += "<div class='typenumber'>"+str(self.type_number)+"</div>\n"
+        return s
+
     def html(self):
         s = "<div class='%s card'>\n" % (slug_text(self.cardtype))
+
+        s += self.art_spacer_html()
 
         s += self.title_area_html()
         s += self.cardtype_area_html()
@@ -269,6 +311,9 @@ class Card:
         s += self.textbox_html()
         s += self.traits_html()
         s += "</div>"#/.card_body_area
+
+        if self.number is not None:
+            s += self.numbering_html()
 
         s += self.copyline_html()
         s += "</div>\n"
@@ -287,6 +332,7 @@ class ProxyPrinter:
         self.colorize = colorize
         self.rich_fields = rich_fields
         self.addzipbutton = addzipbutton
+        self.counter = CardCounter()
 
         self.parse_settings()
         self.parse_sheet_cards()
@@ -321,8 +367,7 @@ class ProxyPrinter:
                             setting_keys.index(SETTING_LABEL_CSSFILE)]
             except ValueError:
                 logger.info("Failed to get addcss value from settings")
-        else:
-            print("ADDCSS",self.addcss, type(self.addcss))
+
 
         # Setting: Copyright
         if not self.copyowner:
@@ -424,7 +469,8 @@ class ProxyPrinter:
                          copyowner=self.copyowner,
                          size_thresholds=self.size_thresholds,
                          text_subs=self.text_subs,
-                         rich_fields=self.rich_fields)
+                         rich_fields=self.rich_fields,
+                         counter=self.counter)
                 self.cards.append(c)
 
     def trait_colors_css(self):
@@ -467,9 +513,55 @@ class ProxyPrinter:
 
         if self.addzipbutton:
             s += ZIP_CODE
+            s += '<div style="display:none;" id="tts_json">'+escape_html(self.tts())+'</div>'
         s += "</body></html>"
         return s
 
+    def tts(self, url_base="http://localhost/proxyprinter/tts/"): #TODO: url_base
+        DEFAULT_TRANSFORM = {
+            "posX": 0,
+            "posY": 0,
+            "posZ": 0,
+            "rotX": 0,
+            "rotY": 180,
+            "rotZ": 180,
+            "scaleX": 1,
+            "scaleY": 1,
+            "scaleZ": 1
+        }
+
+        contained_objs = []
+        deck_ids = []
+        custom_deck = {}
+
+        c_id = 0
+        for card in self.cards:
+            c_id += 1
+            contained_objs.append({
+                "CardID": c_id*100,
+                "Name": "Card",
+                "Nickname": card.fields.get("Name", ""),
+                "Transform": DEFAULT_TRANSFORM
+            })
+            deck_ids.append(c_id*100)
+            custom_deck[str(c_id)] = {
+                "FaceURL": url_base+str(c_id)+".jpg",
+                "BackURL": "https://mduo13.com/stuff/back.jpg",
+                "NumHeight": 1,
+                "NumWidth": 1,
+                "BackIsHidden": True
+            }
+
+        j = {
+            "ObjectStates": [{
+                "Name": "DeckCustom",
+                "ContainedObjects": contained_objs,
+                "DeckIDs": deck_ids,
+                "CustomDeck": custom_deck,
+                "Transform": DEFAULT_TRANSFORM
+            }]
+        }
+        return json.dumps(j)
 
 def main():
     parser = argparse.ArgumentParser(
