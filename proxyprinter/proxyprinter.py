@@ -563,6 +563,43 @@ class ProxyPrinter:
         }
         return json.dumps(j)
 
+class SheetSettings(ProxyPrinter):
+    """
+    Simplified version of the ProxyPrinter class just for loading settings from
+    the spreadsheet.
+    """
+    def __init__(self, spreadsheet):
+        self.spreadsheet = spreadsheet
+        self.copyowner = None
+        self.version = None
+        self.addcss = None
+        self.defaultcss = None
+        self.text_subs = {}
+        self.colorize = True
+        self.rich_fields = []
+        self.addzipbutton = True
+        
+        self.read_sheet(spreadsheet)
+        self.parse_settings()
+    
+    def __iter__(self):
+        """
+        By making this iterable we can unpack the settings with * and use them
+        as args to a full ProxyPrinter.
+        """
+        yield self.spreadsheet
+        yield self.copyowner
+        yield self.version
+        yield self.addcss
+        yield self.defaultcss
+        yield self.text_subs
+        yield self.colorize
+        yield self.rich_fields
+        yield self.addzipbutton
+    
+    # TODO: parse other sheets to figure out field names
+
+        
 def main():
     parser = argparse.ArgumentParser(
         description="Generate card images in HTML from spreadsheet.")

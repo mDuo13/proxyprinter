@@ -9,7 +9,7 @@ long_description = open('README.md').read()
 
 setup(
     name='proxyprinter',
-    version='0.4.0-a23',
+    version='0.4.0-a24',
     description='Generate card game mockups from .ods spreadsheets',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -24,7 +24,7 @@ setup(
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Operating System :: POSIX',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.11',
         'Topic :: Utilities',
         'Topic :: Games/Entertainment :: Board Games',
     ],
