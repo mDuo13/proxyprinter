@@ -322,7 +322,7 @@ class Card:
 class ProxyPrinter:
     def __init__(self, spreadsheet, copyowner=None, version=None, addcss=None,
                 defaultcss=True, text_subs={}, colorize=True, rich_fields=[],
-                addzipbutton=True):
+                addzipbutton=True, size_thresholds={}):
         self.read_sheet(spreadsheet)
         self.copyowner = copyowner
         self.version = version
@@ -332,6 +332,7 @@ class ProxyPrinter:
         self.colorize = colorize
         self.rich_fields = rich_fields
         self.addzipbutton = addzipbutton
+        self.size_thresholds = size_thresholds
         self.counter = CardCounter()
 
         self.parse_settings()
@@ -342,7 +343,6 @@ class ProxyPrinter:
 
     def parse_settings(self):
         self.skip_sheets = [SETTING_SHEET_LABEL]
-        self.size_thresholds = DEFAULT_TEXT_SIZING_THRESHOLDS
         if type(self.sheet) != OrderedDict:
             logger.info("Single page sheet (%s); no settings pulled"%type(self.sheet))
             # Single page sheet; no custom settings defined
@@ -378,73 +378,77 @@ class ProxyPrinter:
                 logger.info("Failed to get copyright value from settings")
 
         # Setting: Text Size Thresholds
-        try:
-            pos_textsizefield = setting_keys.index(SETTING_LABEL_TEXTSIZEFIELD)
-            pos_textsizemed = setting_keys.index(SETTING_LABEL_TEXTSIZETHRESHOLD1)
-            pos_textsizesmall = setting_keys.index(SETTING_LABEL_TEXTSIZETHRESHOLD2)
-            got_textsize_settings = True
-        except ValueError:
-            logger.info("Failed to get text size thresholds from settings")
-            got_textsize_settings = False
+        if not self.size_thresholds:
+            self.size_thresholds = DEFAULT_TEXT_SIZING_THRESHOLDS
+            try:
+                pos_textsizefield = setting_keys.index(SETTING_LABEL_TEXTSIZEFIELD)
+                pos_textsizemed = setting_keys.index(SETTING_LABEL_TEXTSIZETHRESHOLD1)
+                pos_textsizesmall = setting_keys.index(SETTING_LABEL_TEXTSIZETHRESHOLD2)
+                got_textsize_settings = True
+            except ValueError:
+                logger.info("Failed to get text size thresholds from settings")
+                got_textsize_settings = False
 
-        if got_textsize_settings:
-            for row in settings_sheet[1:]:
-                if len(row) > pos_textsizefield and row[pos_textsizefield]:
-                    textfieldname = row[pos_textsizefield]
-                    # Get existing or default thresholds for this field name
-                    if textfieldname in self.size_thresholds.keys():
-                        threshold_med, threshold_sm = self.size_thresholds[textfieldname]
+            if got_textsize_settings:
+                for row in settings_sheet[1:]:
+                    if len(row) > pos_textsizefield and row[pos_textsizefield]:
+                        textfieldname = row[pos_textsizefield]
+                        # Get existing or default thresholds for this field name
+                        if textfieldname in self.size_thresholds.keys():
+                            threshold_med, threshold_sm = self.size_thresholds[textfieldname]
+                        else:
+                            threshold_med, threshold_sm = self.size_thresholds["*"]
                     else:
-                        threshold_med, threshold_sm = self.size_thresholds["*"]
-                else:
-                    logger.debug("Text Thresholds: Skipping row %s"%row)
-                    continue
+                        logger.debug("Text Thresholds: Skipping row %s"%row)
+                        continue
 
-                if len(row) > pos_textsizemed and row[pos_textsizemed]:
-                    threshold_med = row[pos_textsizemed]
+                    if len(row) > pos_textsizemed and row[pos_textsizemed]:
+                        threshold_med = row[pos_textsizemed]
 
-                if len(row) > pos_textsizesmall and row[pos_textsizesmall]:
-                    threshold_sm = row[pos_textsizesmall]
+                    if len(row) > pos_textsizesmall and row[pos_textsizesmall]:
+                        threshold_sm = row[pos_textsizesmall]
 
-                self.size_thresholds[textfieldname] = (threshold_med, threshold_sm)
+                    self.size_thresholds[textfieldname] = (threshold_med, threshold_sm)
 
         # Setting: Rich Fields (These fields have post-processing applied)
-        try:
-            pos_richfields = setting_keys.index(SETTING_LABEL_RICHFIELDS)
-            got_richfield_settings = True
-        except ValueError:
-            logger.info("Failed to get rich text settings")
-            got_richfield_settings = False
+        if not self.rich_fields:
+            try:
+                pos_richfields = setting_keys.index(SETTING_LABEL_RICHFIELDS)
+                got_richfield_settings = True
+            except ValueError:
+                logger.info("Failed to get rich text settings")
+                got_richfield_settings = False
 
-        if got_richfield_settings:
-            rich_fields = []
-            for row in settings_sheet[1:]:
-                if len(row) > pos_richfields and row[pos_richfields]:
-                    rich_fields.append(row[pos_richfields])
-            self.rich_fields = rich_fields
-        else:
-            self.rich_fields = DEFAULT_RICH_FIELDS
+            if got_richfield_settings:
+                rich_fields = []
+                for row in settings_sheet[1:]:
+                    if len(row) > pos_richfields and row[pos_richfields]:
+                        rich_fields.append(row[pos_richfields])
+                self.rich_fields = rich_fields
+            else:
+                self.rich_fields = DEFAULT_RICH_FIELDS
 
         # Setting: Text Processing Patterns (regex subs applied to rich fields)
-        try:
-            pos_processpatterns = setting_keys.index(SETTING_LABEL_PROCESSPATTERNS)
-            pos_processreplacements = setting_keys.index(SETTING_LABEL_PROCESSREPLACEMENTS)
-            got_textprocessing_settings = True
-        except ValueError:
-            logger.info("Failed to get text processing settings")
-            got_textprocessing_settings = False
+        if not self.text_subs:
+            try:
+                pos_processpatterns = setting_keys.index(SETTING_LABEL_PROCESSPATTERNS)
+                pos_processreplacements = setting_keys.index(SETTING_LABEL_PROCESSREPLACEMENTS)
+                got_textprocessing_settings = True
+            except ValueError:
+                logger.info("Failed to get text processing settings")
+                got_textprocessing_settings = False
 
-        if got_textprocessing_settings:
-            text_subs = OrderedDict()
-            for row in settings_sheet[1:]:
-                if (len(row) > pos_processpatterns
-                        and row[pos_processpatterns]
-                        and len(row) > pos_processreplacements
-                        and row[pos_processreplacements]):
-                    pattern = re.compile(row[pos_processpatterns])
-                    repl = row[pos_processreplacements]
-                    text_subs[pattern] = repl
-            self.text_subs = text_subs
+            if got_textprocessing_settings:
+                text_subs = OrderedDict()
+                for row in settings_sheet[1:]:
+                    if (len(row) > pos_processpatterns
+                            and row[pos_processpatterns]
+                            and len(row) > pos_processreplacements
+                            and row[pos_processreplacements]):
+                        pattern = re.compile(row[pos_processpatterns])
+                        repl = row[pos_processreplacements]
+                        text_subs[pattern] = repl
+                self.text_subs = text_subs
 
     def parse_sheet_cards(self):
         self.cards = []
@@ -578,6 +582,7 @@ class SheetSettings(ProxyPrinter):
         self.colorize = True
         self.rich_fields = []
         self.addzipbutton = True
+        self.size_thresholds = {}
         
         self.read_sheet(spreadsheet)
         self.parse_settings()
@@ -596,8 +601,26 @@ class SheetSettings(ProxyPrinter):
         yield self.colorize
         yield self.rich_fields
         yield self.addzipbutton
+        yield self.size_thresholds
     
-    # TODO: parse other sheets to figure out field names
+    def all_fields(self):
+        """
+        Return a list of all field names (first row items) used in any tab 
+        except the ProxyPrinterSettings sheet.
+        """
+        fieldnames = set()
+        if type(self.sheet) == OrderedDict:
+            pages = self.sheet.items()
+        else:
+            pages = {"-": self.sheet}.items()
+        for sheetname, sheetdata in pages:
+            if sheetname == SETTING_SHEET_LABEL:
+                #This sheet is settings; skip
+                continue
+            if len(sheetdata):
+                # Add (union) first row (field names) to the set of unique names
+                fieldnames.update(sheetdata[0])
+        return list(fieldnames)
 
         
 def main():
