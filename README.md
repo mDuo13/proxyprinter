@@ -4,16 +4,14 @@ Proxy Printer
 Generates reasonably good-looking HTML proxies for a card game from an ODS spreadsheet. Useful for making card game prototypes. Comes with some basic CSS; you can add your own style rules to make the proxies prettier or better suited to your game. Does some heuristic text resizing so that text of different lengths is more likely to fit without being too small.
 
 
-Installing with pip
+Installing (Python 3 required)
 ------
 
-(Python 3 required)
-
 ```
-pip3 install proxyprinter
+pip install proxyprinter
 ```
 
-(You might need to use `sudo` or a VirtualEnv depending on your system setup.)
+(You might need to use a VirtualEnv depending on your system.)
 
 
 Usage
@@ -22,6 +20,12 @@ Usage
      proxyprinter example-cards.ods > output_file.html
 
 Do `proxyprinter --help` for usage statement with all commandline options.
+
+There's also an (experimental) GUI, which you can run as:
+
+     proxyprintergui
+
+The GUI provides access to most settings although currently it doesn't let you save them for later.
 
 
 Input Format
@@ -47,12 +51,13 @@ You can customize various settings for your project by adding a `ProxyPrinter Se
 |------------|-------------|------------|
 | `CSSFile`  | The filename of an external CSS file to reference. | Put the value in the **2nd row**, same column |
 | `Copyright` | The copyright owner to print at the bottom of the cards. | Put the value in the **2nd row**, same column |
+| `BaseURL`  | The base URL for images to use when making Tabletop Simulator exports, e.g. `https://example.com/some/folders/`. | Put the value in the **2nd row**, same column |
 | Text Size Thresholds | Downsize text when it exceeds length thresholds. | [Text Size Thresholds](#text-size-thresholds) |
 | Rich Field Substitution | Substitution patterns to embed special styles or symbols in field text | [Rich Field Substitutions](#rich-field-substitutions) |
 
 For any setting defined in the spreadsheet that can also be set by commandline parameter, the commandline parameter overrides it if specified.
 
-### Text Size Thresholds ###
+### Text Size Thresholds
 
 The Proxy Printer sizes down text for most fields based on the number of characters in it. Depending on how much space you have available for each field, you may need to adjust these thresholds, so that it goes down to medium or small text sizes with less (or more) text.
 
@@ -71,7 +76,7 @@ In each row after it, you can define a threshold to use.  In each row, put the v
 Any default values you don't redefine remain. Any fields that don't have thresholds defined use the thresholds for `*` (whether you defined it or left it default).
 
 
-### Rich Field Substitutions ###
+### Rich Field Substitutions
 
 To include special styles and images inline in your text, you can define patterns from the spreadsheet values that will map to specific styles in the HTML. For example, you can make it so that `<5 G>` gets replaced with a "5 Gold" icon in the text. (Custom CSS may be necessary, of course.)
 
@@ -89,3 +94,16 @@ In each later row, put the following values:
 | [Regular Expression](https://docs.python.org/3/library/re.html) to search for in the text. Example: `\<([0-9]+) G\>` | Text to replace it with. Regular-expression backreferences are allowed. Example: `<span class='gold_coin'>\1</span>` |
 
 These substitutions apply after escaping any HTML that appears in the text, so if your pattern needs to match `<` or `>`, you must use the escaped versions `&lt;` and `&gt;` instead. Also, this means your substitutions can include raw HTML.
+
+
+Tabletop Simulator Export
+-------------------------
+
+TTS export is experimental/janky, but the tool _can_ create a zip file with images and JSON files you can then use to import a page of cards into [Tabletop Simulator](https://store.steampowered.com/app/286160/Tabletop_Simulator/) for playing online.
+
+1. Set the `BaseURL` in your sheet to the path at a website where you can upload image files
+2. Build the proxy sheet HTML file using these tools
+3. Load the proxy sheet _from a web server_. It won't work if you access it using a `file://` URL (something about HTML5 Canvas security settings). You can use `python -m http.server` from the folder you wrote the output to
+4. Click the "Make ZIP" button (at the end of the card list) and wait. It might take a while and scroll the page a bit before starting a zip file download
+5. Extract the zip and upload the images to the site you set in the Base URL. Optionally add a `back.jpeg` image depicting the card back to use
+6. Move the JSON file from the zip to your Tabletop Simulator's saved objects folder. Open TTS and load the file as a saved object. It might take a few moments to load all the card images

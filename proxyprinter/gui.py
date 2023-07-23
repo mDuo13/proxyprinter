@@ -60,6 +60,15 @@ class ProxySetupGui(QtWidgets.QWidget):
         setting_2.addWidget(lbl_css)
         setting_2.addWidget(self.css_file)
         lo_sb.addLayout(setting_2)
+
+        setting_3 = QtWidgets.QHBoxLayout()
+        lbl_baseurl = QtWidgets.QLabel("Base URL (for TTS images)")
+        self.base_url = QtWidgets.QLineEdit("", self)
+        lbl_baseurl.setBuddy(self.base_url)
+        setting_3.addWidget(lbl_baseurl)
+        setting_3.addWidget(self.base_url)
+        lo_sb.addLayout(setting_3)
+
         self.toggles = []
         for tog in ("Include default CSS", "Colorize Traits", "Add Zip button for Tabletop Simulator export"):
             btn_tog = QtWidgets.QCheckBox(tog, self)
@@ -174,6 +183,7 @@ class ProxySetupGui(QtWidgets.QWidget):
         """
         self.sheet_settings.copyowner = self.copyright.text()
         self.sheet_settings.addcss = self.css_file.text()
+        self.sheet_settings.base_url = self.base_url.text()
 
         self.sheet_settings.defaultcss = self.toggles[0].isChecked()
         self.sheet_settings.colorize = self.toggles[1].isChecked()

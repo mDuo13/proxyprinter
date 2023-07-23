@@ -45,6 +45,7 @@ SETTING_LABEL_TEXTSIZETHRESHOLD2 = "TextSizeSmallIfOver"
 SETTING_LABEL_RICHFIELDS = "RichFields"
 SETTING_LABEL_PROCESSPATTERNS = "ProcessPatterns"
 SETTING_LABEL_PROCESSREPLACEMENTS = "ProcessReplacements"
+SETTING_LABEL_BASEURL = "BaseURL"
 
 
 #Set up logging
@@ -285,7 +286,7 @@ class Card:
 class ProxyPrinter:
     def __init__(self, spreadsheet, copyowner=None, version=None, addcss=None,
                 defaultcss=True, text_subs={}, colorize=True, rich_fields=[],
-                addzipbutton=True, size_thresholds={}):
+            addzipbutton=True, size_thresholds={}, base_url=""):
         self.read_sheet(spreadsheet)
         self.copyowner = copyowner
         self.version = version
@@ -296,6 +297,7 @@ class ProxyPrinter:
         self.rich_fields = rich_fields
         self.addzipbutton = addzipbutton
         self.size_thresholds = size_thresholds
+        self.base_url = base_url
         self.counter = CardCounter()
 
         self.parse_settings()
@@ -412,6 +414,16 @@ class ProxyPrinter:
                         repl = row[pos_processreplacements]
                         text_subs[pattern] = repl
                 self.text_subs = text_subs
+        
+        if not self.base_url:
+            try:
+                self.base_url = setting_simple_values[
+                                    setting_keys.index(SETTING_LABEL_BASEURL)]
+                if self.base_url and self.base_url[-1:] != "/":
+                    self.base_url = self.base_url + "/"
+            except ValueError:
+                logger.info("Failed to get Base URL from settings")
+                
 
     def parse_sheet_cards(self):
         self.cards = []
@@ -484,7 +496,7 @@ class ProxyPrinter:
         s += "</body></html>"
         return s
 
-    def tts(self, url_base="http://localhost/proxyprinter/tts/"): #TODO: url_base
+    def tts(self): #TODO: base_url
         DEFAULT_TRANSFORM = {
             "posX": 0,
             "posY": 0,
@@ -512,8 +524,8 @@ class ProxyPrinter:
             })
             deck_ids.append(c_id*100)
             custom_deck[str(c_id)] = {
-                "FaceURL": url_base+str(c_id)+".jpg",
-                "BackURL": "https://mduo13.com/stuff/back.jpg",
+                "FaceURL": self.base_url+str(c_id)+".jpg",
+                "BackURL": self.base_url+"back.jpg",
                 "NumHeight": 1,
                 "NumWidth": 1,
                 "BackIsHidden": True
@@ -546,6 +558,7 @@ class SheetSettings(ProxyPrinter):
         self.rich_fields = []
         self.addzipbutton = True
         self.size_thresholds = {}
+        self.base_url = ""
         
         self.read_sheet(spreadsheet)
         self.parse_settings()
