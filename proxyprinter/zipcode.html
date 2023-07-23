@@ -1,0 +1,36 @@
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.5.0/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+<script type="application/javascript">
+async function makezip() {
+  const zbutton = document.querySelector(".zipmaker")
+  zbutton.disabled = "disabled"
+  const oldtext = zbutton.textContent
+
+  const zip = new JSZip()
+  const fname = window.location.pathname.split("/").pop().replace(".html","")
+
+  const tts_json = document.querySelector("#tts_json").textContent
+  zip.file(`${fname}.json`, tts_json)
+
+  const canvas_opts = {
+    scale: 4
+  }
+
+  let n = 1;
+  const cards = document.querySelectorAll(".card")
+  for (const card of cards) {
+    zbutton.textContent = `${oldtext} (${n+1}/${cards.length})`
+    window.scrollTo(0, 0) // workaround for https://github.com/niklasvh/html2canvas/issues/1878
+    const canvas = await html2canvas(card, canvas_opts)
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'))
+    zip.file(`${n++}.jpg`, blob)
+  }
+  fullzip = await zip.generateAsync({type:"blob"})
+
+  saveAs(fullzip, fname+".zip")
+  zbutton.textContent = oldtext
+  zbutton.disabled = ""
+}
+</script>
+<button onclick="javascript:makezip()" class="zipmaker">Make image ZIP</button>

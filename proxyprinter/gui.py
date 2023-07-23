@@ -6,7 +6,8 @@ import webbrowser
 from collections import OrderedDict
 
 from PySide6 import QtCore, QtWidgets, QtGui
-from proxyprinter import ProxyPrinter, SheetSettings
+
+from .proxyprinter import ProxyPrinter, SheetSettings
 
 
 class ProxySetupGui(QtWidgets.QWidget):
@@ -59,8 +60,13 @@ class ProxySetupGui(QtWidgets.QWidget):
         setting_2.addWidget(lbl_css)
         setting_2.addWidget(self.css_file)
         lo_sb.addLayout(setting_2)
-        # TODO: defaultcss, colorize, addzipbutton
-
+        self.toggles = []
+        for tog in ("Include default CSS", "Colorize Traits", "Add Zip button for Tabletop Simulator export"):
+            btn_tog = QtWidgets.QCheckBox(tog, self)
+            btn_tog.setChecked(True)
+            lo_sb.addWidget(btn_tog)
+            self.toggles.append(btn_tog)
+        
         richfields = QtWidgets.QGroupBox("Rich Fields")
         lo_rf = QtWidgets.QVBoxLayout()
         richfields.setLayout(lo_rf)
@@ -144,6 +150,7 @@ class ProxySetupGui(QtWidgets.QWidget):
         for rf in self.sheet_settings.rich_fields:
             self.rf_list.addItem(rf)
         self.rfsubs.clear()
+        self.rfsubs.setHorizontalHeaderLabels(("Find (regular expression)", "Replace (HTML, use \\1, \\2, etc for backreferences)"))
         self.rfsubs.setRowCount(len(self.sheet_settings.text_subs.keys())+1)
         for i, (pattern, replacement) in enumerate(self.sheet_settings.text_subs.items()):
             self.rfsubs.setItem(i, 0, QtWidgets.QTableWidgetItem(pattern.pattern))
@@ -168,15 +175,26 @@ class ProxySetupGui(QtWidgets.QWidget):
         self.sheet_settings.copyowner = self.copyright.text()
         self.sheet_settings.addcss = self.css_file.text()
 
+        self.sheet_settings.defaultcss = self.toggles[0].isChecked()
+        self.sheet_settings.colorize = self.toggles[1].isChecked()
+        self.sheet_settings.addzipbutton = self.toggles[2].isChecked()
+
         self.sheet_settings.rich_fields = [self.rf_list.item(r).text() for r in range(self.rf_list.count())]
         ts = OrderedDict()
         for row in range(self.rfsubs.rowCount()):
-            pat_text = self.rfsubs.itemAt(row, 0).text()
+            pat_item = self.rfsubs.item(row, 0)
+            if not pat_item:
+                continue
+            pat_text = pat_item.text()
             if not pat_text:
                 continue
             pat = re.compile(pat_text) #TODO: try/except?
-            ts[pat] = self.rfsubs.itemAt(row, 1).text()
+            repl_item = self.rfsubs.item(row, 1)
+            if not repl_item:
+                continue
+            ts[pat] = repl_item.text()
         self.sheet_settings.text_subs = ts
+
 
     
     @QtCore.Slot()
@@ -209,7 +227,7 @@ class ProxySetupGui(QtWidgets.QWidget):
         for r in sel_rows:
             self.rfsubs.removeRow(r)
 
-if __name__ == "__main__":
+def main():
     app = QtWidgets.QApplication([])
 
     widget = ProxySetupGui()
@@ -217,3 +235,7 @@ if __name__ == "__main__":
     widget.show()
 
     sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

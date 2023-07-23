@@ -9,7 +9,7 @@ long_description = open('README.md').read()
 
 setup(
     name='proxyprinter',
-    version='0.4.0-a24',
+    version='0.4.0-a27',
     description='Generate card game mockups from .ods spreadsheets',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -36,11 +36,15 @@ setup(
         'console_scripts': [
             'proxyprinter = proxyprinter.proxyprinter:main',
         ],
+        'gui_scripts': [
+            'proxyprintergui = proxyprinter.gui:main',
+        ]
     },
     install_requires=[
         'pyexcel-ods3',
     ],
     package_data={
         '': ["proxyprinter.css"],
+        '': ["zipcode.html"],
     }
 )
